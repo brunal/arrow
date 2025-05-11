@@ -324,8 +324,6 @@ class RecordBatchSerializer {
     // Share slicing logic between ListArray, BinaryArray and LargeBinaryArray
     using offset_type = typename ArrayType::offset_type;
 
-    auto offsets = array.value_offsets();
-
     int64_t required_bytes = sizeof(offset_type) * (array.length() + 1);
     if (array.length() && array.value_offset(0)) {
       // If the first value offset is non-zero, we must create a new offsets
@@ -336,20 +334,20 @@ class RecordBatchSerializer {
       auto dest_offsets = shifted_offsets->mutable_span_as<offset_type>();
       const offset_type start_offset = array.value_offset(0);
 
-      for (int i = 0; i < array.length(); ++i) {
+      for (int i = 0; i <= array.length(); ++i) {
         dest_offsets[i] = array.value_offset(i) - start_offset;
       }
-      // Final offset
-      dest_offsets[array.length()] = array.value_offset(array.length()) - start_offset;
-      offsets = std::move(shifted_offsets);
+      *value_offsets = std::move(shifted_offsets);
     } else {
       // ARROW-6046: Slice offsets to used extent, in case we have a truncated
       // slice
+      const auto& offsets = array.value_offsets();
       if (offsets != nullptr && offsets->size() > required_bytes) {
-        offsets = SliceBuffer(offsets, 0, required_bytes);
+        *value_offsets = SliceBuffer(offsets, 0, required_bytes);
+      } else {
+	*value_offsets = std::move(offsets);
       }
     }
-    *value_offsets = std::move(offsets);
     return Status::OK();
   }
 
